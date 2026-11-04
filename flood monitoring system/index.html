@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flood monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--fog:#E4ECEF;--panel:#fff;--ink:#0F2A35;--muted:#5C7480;--line:#D3DFE4;--water:#2B7A9B;--safe:#2F8F5B;--warn:#D9981E;--flood:#C23B2E;--idle:#7D8F98;--accent:var(--idle);font-family:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif}
+body[data-status=SAFE]{--accent:var(--safe)}body[data-status=WARNING]{--accent:var(--warn)}body[data-status=FLOOD]{--accent:var(--flood)}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);min-height:100vh;background:linear-gradient(180deg,#d5e6ec 0,var(--fog) 320px)}
+.banner{background:var(--accent);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;transition:background .4s}
+body[data-status=WARNING] .banner{color:#1d1500}
+.banner h1{margin:0;font-size:clamp(1.4rem,3.4vw,2.3rem);font-weight:800;letter-spacing:-.01em}
+.banner p{margin:4px 0 0;opacity:.95}
+.tag{background:rgba(0,0,0,.22);border-radius:99px;padding:6px 14px;font-weight:700;font-size:.85rem}
+main{max-width:1180px;margin:0 auto;padding:22px;display:grid;grid-template-columns:minmax(250px,320px) 1fr;gap:22px}
+@media(max-width:800px){main{grid-template-columns:1fr;padding:14px}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 6px 18px rgba(15,42,53,.06)}
+h2{margin:0 0 12px;font-size:1rem;font-weight:800}
+.stack{display:flex;flex-direction:column;gap:22px;min-width:0}
+/* gauge */
+.gw{display:flex;gap:16px}
+.tube{position:relative;width:112px;height:400px;flex:none;border:3px solid var(--ink);border-radius:20px;background:linear-gradient(90deg,#f4f9fb,#fff);overflow:hidden;touch-action:none}
+body.demo .tube{cursor:ns-resize;box-shadow:0 0 0 4px rgba(43,122,155,.25)}
+.water{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--water);transition:height .7s ease,background-color .4s}
+body[data-status=WARNING] .water{background:var(--warn)}body[data-status=FLOOD] .water{background:var(--flood)}
+.water::before{content:"";position:absolute;left:50%;top:-16px;width:240px;height:240px;margin-left:-120px;border-radius:42%;background:inherit;opacity:.5;animation:spin 8s linear infinite}
+.water.empty::before{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mark{position:absolute;left:0;right:0;border-top:2px dashed var(--ink);opacity:.6}
+.mark i{position:absolute;right:4px;top:2px;font:700 10px/1 inherit;font-style:normal}
+.rd{display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
+.pct{font-size:3.8rem;font-weight:800;line-height:1;letter-spacing:-.03em}.pct small{font-size:1.5rem;font-weight:500}
+.sub{color:var(--muted);font-size:.88rem}
+.hint{margin-top:12px;font-size:.85rem;color:var(--muted)}
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 6px 18px rgba(15,42,53,.06)}
+.tile b{display:block;font-size:1.6rem;font-weight:800;letter-spacing:-.02em}
+.tile span{color:var(--muted);font-size:.82rem}
+/* demo */
+.ctl{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+button{font:inherit;font-weight:700;border:2px solid var(--ink);background:#fff;color:var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer}
+button[aria-pressed=true]{background:var(--ink);color:#fff}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--water)}
+.nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:12px}
+.nums label{font-size:.8rem;color:var(--muted);display:block}
+.nums input{width:100%;font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+/* chart */
+svg.chart{width:100%;height:auto;display:block;cursor:crosshair}
+.chart text{fill:var(--muted);font-size:11px;font-family:inherit}
+/* maths */
+.math{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92rem}
+.eq{border-left:5px solid var(--water);background:#F2F8FA;border-radius:0 10px 10px 0;padding:10px 14px;margin:0 0 12px}
+.eq h3{margin:0 0 4px;font:700 .85rem "Schibsted Grotesk",system-ui,sans-serif}
+.eq div{margin:2px 0;overflow-wrap:anywhere}.eq .f{color:var(--muted)}.eq .r{font-weight:700}
+/* alerts */
+ul.al{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+.al li{display:grid;grid-template-columns:6px 1fr auto;gap:12px;padding:10px 0;border-top:1px solid var(--line);align-items:center}
+.al li:first-child{border-top:0}.al .bar{align-self:stretch;border-radius:3px;background:var(--idle)}
+.al li[data-s=critical] .bar{background:var(--flood)}.al li[data-s=warning] .bar{background:var(--warn)}.al li[data-s=info] .bar{background:var(--safe)}
+.al time{color:var(--muted);font-size:.85rem}.empty{color:var(--muted);margin:0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--idle);margin-right:6px}
+.dot.ok{background:var(--safe)}.dot.bad{background:var(--flood)}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.water,.water::before{transition:none;animation:none}}
+</style>
+</head>
+<body data-status="WAITING">
+<header class="banner" role="status" aria-live="assertive">
+  <div><h1 id="hl">Waiting for sensor</h1><p id="msg"></p></div>
+  <span class="tag" id="tag">Live sensor</span>
+</header>
+<main>
+  <section class="card" aria-label="Water level gauge">
+    <h2>Water level</h2>
+    <div class="gw">
+      <div class="tube" id="tube"><div class="water empty" id="water"></div>
+        <div class="mark" id="mW"><i>WARN</i></div><div class="mark" id="mF"><i>FLOOD</i></div></div>
+      <div class="rd"><div class="pct"><span id="pct">--</span><small>%</small></div><div class="sub" id="litres">--</div></div>
+    </div>
+    <p class="hint" id="hint">Turn on Demo mode, then drag the tank or the slider to change the water level.</p>
+  </section>
+
+  <div class="stack">
+    <div class="tiles">
+      <div class="tile"><b id="tRate">--</b><span>Rate of change (% per min)</span></div>
+      <div class="tile"><b id="tEta">--</b><span>Predicted time to flood</span></div>
+      <div class="tile"><b id="tSd">--</b><span>Noise σ (last 30 readings)</span></div>
+      <div class="tile"><b id="tLink"><span class="dot" id="dot"></span><span id="linkTxt">Connecting</span></b><span id="meta">Sensor --</span></div>
+    </div>
+
+    <section class="card">
+      <h2>Demo mode (no sensor needed)</h2>
+      <div class="ctl">
+        <button id="bDemo" aria-pressed="false">Demo mode</button>
+        <button id="bAuto" aria-pressed="false">Auto-rise</button>
+        <input type="range" id="sl" min="0" max="100" step="1" value="10" aria-label="Simulated water level">
+        <b id="slv">10%</b>
+      </div>
+      <div class="nums">
+        <div><label for="cDry">Sensor dry reading</label><input id="cDry" type="number" value="0"></div>
+        <div><label for="cWet">Sensor full reading</label><input id="cWet" type="number" value="2000"></div>
+        <div><label for="cW">Tank width (cm)</label><input id="cW" type="number" value="100"></div>
+        <div><label for="cL">Tank length (cm)</label><input id="cL" type="number" value="100"></div>
+        <div><label for="cH">Tank height (cm)</label><input id="cH" type="number" value="50"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Level history and trend line <span class="sub">(hover for exact values)</span></h2>
+      <svg class="chart" id="chart" viewBox="0 0 640 220" role="img" aria-label="Water level history"></svg>
+    </section>
+
+    <section class="card">
+      <h2>The maths behind it (updates live)</h2>
+      <div class="math" id="math"></div>
+    </section>
+
+    <section class="card">
+      <h2>Alerts</h2>
+      <ul class="al" id="al"></ul>
+      <p class="empty" id="alE">No alerts yet. One appears when the water status changes or the sensor goes offline.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const API_BASE='https://YOUR-APP-NAME.onrender.com'; // Render URL, no trailing slash
+const OFFLINE_MS=15000;
+const mk=()=>({state:{device:null,level:0,raw:0,status:'UNKNOWN',warn:35,flood:65,rssi:null,lastSeen:null,online:false},history:[],alerts:[]});
+const live=mk(), sim=mk(); sim.state.online=true; sim.state.device='demo';
+let M=live, auto=false, hover=null, simLevel=10;
+const num=id=>+$(id).value||0, f=(v,d=1)=>Number(v).toFixed(d);
+const statusOf=(l,s)=>l>=s.flood?'FLOOD':l>=s.warn?'WARNING':'SAFE';
+
+function addAlert(D,sev,message){const a={t:Date.now(),severity:sev,message};D.alerts.unshift(a);if(D.alerts.length>50)D.alerts.pop();if(D===M)renderAlerts()}
+function push(D,level,raw,t){D.history.push({t,level});if(D.history.length>300)D.history.shift()}
+
+/* ---- maths ---- */
+function stats(){
+  const p=M.history.slice(-30),n=p.length;if(n<3)return null;
+  const t1=p[n-1].t,xs=p.map(a=>(a.t-t1)/60000),ys=p.map(a=>a.level);
+  let sx=0,sy=0,sxy=0,sxx=0;for(let i=0;i<n;i++){sx+=xs[i];sy+=ys[i];sxy+=xs[i]*ys[i];sxx+=xs[i]*xs[i]}
+  const den=n*sxx-sx*sx,m=den?(n*sxy-sx*sy)/den:0,c=(sy-m*sx)/n,mean=sy/n;
+  const sd=Math.sqrt(ys.reduce((a,y)=>a+(y-mean)**2,0)/n);
+  return{m,c,mean,sd,n,x0:xs[0],x1:0};
+}
+function effStatus(){const s=M.state;if(M===sim)return s.status;if(!s.lastSeen)return'WAITING';if(!s.online||Date.now()-s.lastSeen>OFFLINE_MS)return'OFFLINE';return s.status}
+
+/* ---- render ---- */
+const COPY={WAITING:['Waiting for sensor','The dashboard updates when the ESP32 sends its first reading.'],OFFLINE:['Sensor offline','No reading for over 15 seconds. Check ESP32 power and Wi-Fi.'],SAFE:['Water level is normal','No action needed.'],WARNING:['Water is rising','Keep watching and prepare to move valuables.'],FLOOD:['Flood alert','Water has reached the flood line. Move to higher ground.']};
+function render(){
+  const s=M.state,st=effStatus(),has=M===sim||s.lastSeen,L=has?s.level:0;
+  document.body.dataset.status=st;document.body.classList.toggle('demo',M===sim);
+  $('hl').textContent=COPY[st][0];$('msg').textContent=COPY[st][1];
+  $('tag').textContent=M===sim?'Demo: simulated data':'Live sensor';
+  document.title=st==='FLOOD'?'⚠ FLOOD ALERT':st==='WARNING'?'Rising water':'Flood monitor';
+  $('pct').textContent=has?Math.round(L):'--';
+  $('water').style.height=L+'%';$('water').classList.toggle('empty',L<=0);
+  $('mW').style.bottom=s.warn+'%';$('mF').style.bottom=s.flood+'%';
+  const vol=num('cW')*num('cL')*num('cH')*L/100/1000;
+  $('litres').textContent=has?`${f(vol,0)} litres in the tank`:'--';
+  $('meta').textContent=M===sim?'Simulated sensor':`${s.device||'Sensor'}${s.rssi!=null?' · '+s.rssi+' dBm':''}`;
+  $('hint').hidden=M!==sim;
+  renderTiles(st);renderChart();renderMath(vol);renderAlerts();
+}
+function renderTiles(st){
+  const k=stats(),s=M.state;
+  $('tRate').textContent=k?(k.m>=0?'+':'')+f(k.m,1):'--';
+  $('tSd').textContent=k?'±'+f(k.sd,2):'--';
+  let eta='--';
+  if(s.level>=s.flood)eta='Reached';else if(k&&k.m>0.2){const mins=(s.flood-s.level)/k.m;eta=mins<1?Math.round(mins*60)+' s':f(mins,1)+' min'}else if(k)eta='Not rising';
+  $('tEta').textContent=eta;
+  const ok=M===sim||st==='SAFE'||st==='WARNING'||st==='FLOOD';
+  $('dot').className='dot '+(M===sim?'ok':ok?'ok':st==='OFFLINE'?'bad':'');
+  $('linkTxt').textContent=M===sim?'Demo':st==='OFFLINE'?'Offline':st==='WAITING'?'Waiting':'Online';
+}
+function renderMath(vol){
+  const s=M.state,k=stats(),dry=num('cDry'),wet=num('cWet'),raw=s.raw??0;
+  const pctCalc=wet!==dry?(raw-dry)/(wet-dry)*100:0;
+  const eq=(t,...l)=>`<div class="eq"><h3>${t}</h3>${l.map(x=>`<div class="${x[0]}">${x[1]}</div>`).join('')}</div>`;
+  let h=eq('1. Sensor reading to percentage (linear map)',['f','level = (raw − dry) ÷ (full − dry) × 100'],['f',`= (${raw} − ${dry}) ÷ (${wet} − ${dry}) × 100`],['r',`= ${f(Math.min(100,Math.max(0,pctCalc)))} %`]);
+  if(k){
+    h+=eq('2. Trend line by least squares (last '+k.n+' readings)',['f','m = (nΣxy − ΣxΣy) ÷ (nΣx² − (Σx)²)   with x in minutes'],['r',`y = ${f(k.m,2)}·x + ${f(k.c,1)}   (slope m = ${f(k.m,2)} % per min)`]);
+    const eta=k.m>0.2&&s.level<s.flood?`${f((s.flood-s.level)/k.m,1)} min`:'no rise detected';
+    h+=eq('3. Predicted time to flood',['f','t = (flood level − level now) ÷ m'],['f',`= (${s.flood} − ${f(s.level)}) ÷ ${f(k.m,2)}`],['r',`= ${eta}`]);
+    h+=eq('4. Noise (standard deviation)',['f','σ = √( Σ(y − mean)² ÷ n )'],['r',`mean = ${f(k.mean)} %,  σ = ${f(k.sd,2)} %`]);
+  }else h+=eq('2. Trend, prediction and noise',['f','Needs at least 3 readings. Collecting data…']);
+  h+=eq('5. Volume of water in the tank',['f','V = width × length × height × level ÷ 100'],['f',`= ${num('cW')} × ${num('cL')} × ${num('cH')} × ${f(s.level)} ÷ 100 = ${f(num('cW')*num('cL')*num('cH')*s.level/100,0)} cm³`],['r',`= ${f(vol,1)} litres   (1 litre = 1000 cm³)`]);
+  $('math').innerHTML=h;
+}
+function renderChart(){
+  const W=640,H=220,L=34,R=10,T=10,B=22,x0=L,x1=W-R,y0=H-B,y1=T,y=v=>y0-v/100*(y0-y1),s=M.state,hs=M.history;
+  let o='';
+  for(const v of[0,25,50,75,100])o+=`<line x1="${x0}" x2="${x1}" y1="${y(v)}" y2="${y(v)}" stroke="#D3DFE4"/><text x="${x0-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+  o+=`<line x1="${x0}" x2="${x1}" y1="${y(s.warn)}" y2="${y(s.warn)}" stroke="#D9981E" stroke-dasharray="5 4"/><line x1="${x0}" x2="${x1}" y1="${y(s.flood)}" y2="${y(s.flood)}" stroke="#C23B2E" stroke-dasharray="5 4"/>`;
+  if(hs.length>1){
+    const t0=hs[0].t,t1=hs[hs.length-1].t,sp=Math.max(t1-t0,1),X=t=>x0+(t-t0)/sp*(x1-x0);
+    const pts=hs.map(p=>`${X(p.t).toFixed(1)},${y(p.level).toFixed(1)}`).join(' ');
+    o+=`<polygon points="${x0},${y0} ${pts} ${X(t1).toFixed(1)},${y0}" fill="#2B7A9B" opacity=".12"/><polyline points="${pts}" fill="none" stroke="#2B7A9B" stroke-width="2.5" stroke-linejoin="round"/>`;
+    const k=stats();
+    if(k){const ta=t1+k.x0*60000;o+=`<line x1="${X(ta)}" y1="${y(k.m*k.x0+k.c)}" x2="${X(t1)}" y2="${y(k.c)}" stroke="#0F2A35" stroke-width="2" stroke-dasharray="6 4"/>`}
+    o+=`<text x="${x0}" y="${H-6}">${new Date(t0).toLocaleTimeString()}</text><text x="${x1}" y="${H-6}" text-anchor="end">${new Date(t1).toLocaleTimeString()}</text>`;
+    if(hover!==null&&hs[hover]){const p=hs[hover],px=X(p.t),py=y(p.level),lab=`${f(p.level)}% at ${new Date(p.t).toLocaleTimeString()}`,anch=px>W/2?'end':'start';
+      o+=`<line x1="${px}" x2="${px}" y1="${y1}" y2="${y0}" stroke="#0F2A35" opacity=".4"/><circle cx="${px}" cy="${py}" r="5" fill="#fff" stroke="#0F2A35" stroke-width="2"/><text x="${px+(anch==='end'?-8:8)}" y="${y1+12}" text-anchor="${anch}" style="fill:#0F2A35;font-weight:700">${lab}</text>`}
+  }else o+=`<text x="${(x0+x1)/2}" y="${(y0+y1)/2}" text-anchor="middle">Collecting readings…</text>`;
+  $('chart').innerHTML=o;
+}
+function renderAlerts(){
+  const ul=$('al');ul.textContent='';$('alE').hidden=M.alerts.length>0;
+  for(const a of M.alerts){const li=document.createElement('li');li.dataset.s=a.severity;
+    const b=document.createElement('span');b.className='bar';const m=document.createElement('span');m.textContent=a.message;
+    const t=document.createElement('time');t.textContent=new Date(a.t).toLocaleTimeString();li.append(b,m,t);ul.appendChild(li)}
+}
+
+/* ---- chart hover ---- */
+$('chart').addEventListener('mousemove',e=>{
+  const hs=M.history;if(hs.length<2)return;const r=$('chart').getBoundingClientRect(),vx=(e.clientX-r.left)/r.width*640;
+  const t0=hs[0].t,sp=Math.max(hs[hs.length-1].t-t0,1),tt=t0+(vx-34)/(640-44)*sp;
+  let best=0,bd=1e18;hs.forEach((p,i)=>{const d=Math.abs(p.t-tt);if(d<bd){bd=d;best=i}});hover=best;renderChart()});
+$('chart').addEventListener('mouseleave',()=>{hover=null;renderChart()});
+
+/* ---- demo mode ---- */
+function setDemo(on){M=on?sim:live;$('bDemo').setAttribute('aria-pressed',on);hover=null;if(!on){auto=false;$('bAuto').setAttribute('aria-pressed',false)}render()}
+$('bDemo').onclick=()=>setDemo(M!==sim);
+$('bAuto').onclick=()=>{auto=!auto;$('bAuto').setAttribute('aria-pressed',auto);if(auto&&M!==sim)setDemo(true)};
+function setSim(v){simLevel=Math.max(0,Math.min(100,v));$('sl').value=simLevel;$('slv').textContent=Math.round(simLevel)+'%'}
+$('sl').oninput=e=>{setSim(+e.target.value);if(M!==sim)setDemo(true)};
+function tubeSet(e){if(M!==sim)return;const r=$('tube').getBoundingClientRect();setSim(100-(e.clientY-r.top)/r.height*100)}
+$('tube').addEventListener('pointerdown',e=>{$('tube').setPointerCapture(e.pointerId);tubeSet(e)});
+$('tube').addEventListener('pointermove',e=>{if(e.buttons)tubeSet(e)});
+['cDry','cWet','cW','cL','cH'].forEach(id=>$(id).addEventListener('input',render));
+setInterval(()=>{ // simulated sensor: true level plus a little noise
+  if(auto){setSim(simLevel+1.5>100?0:simLevel+1.5)}
+  const s=sim.state,lvl=Math.max(0,Math.min(100,simLevel+(Math.random()-.5)*1.6)),prev=s.status,t=Date.now();
+  s.level=Math.round(lvl*10)/10;s.raw=Math.round(num('cDry')+s.level/100*(num('cWet')-num('cDry')));s.lastSeen=t;s.status=statusOf(s.level,s);
+  push(sim,s.level,s.raw,t);
+  if(prev!=='UNKNOWN'&&prev!==s.status)addAlert(sim,s.status==='FLOOD'?'critical':s.status==='WARNING'?'warning':'info',`Status changed to ${s.status} at ${f(s.level)}%.`);
+  if(M===sim)render();
+},1000);
+setInterval(()=>{if(M===live)render()},3000);
+
+/* ---- live stream ---- */
+function connect(){
+  const es=new EventSource(API_BASE+'/api/stream');
+  es.onopen=()=>{};es.onerror=()=>{if(M===live){$('linkTxt').textContent='Reconnecting';$('dot').className='dot bad'}};
+  es.addEventListener('init',e=>{const d=JSON.parse(e.data);Object.assign(live.state,d.state);live.history=d.history;live.alerts=d.alerts;if(M===live)render()});
+  es.addEventListener('reading',e=>{const d=JSON.parse(e.data);Object.assign(live.state,d.state);push(live,d.point.level,d.state.raw,d.point.t);if(M===live)render()});
+  es.addEventListener('state',e=>{Object.assign(live.state,JSON.parse(e.data));if(M===live)render()});
+  es.addEventListener('alert',e=>{live.alerts.unshift(JSON.parse(e.data));if(M===live)renderAlerts()});
+}
+render();connect();
+</script>
+</body>
+</html>
