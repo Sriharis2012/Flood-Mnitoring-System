@@ -1,0 +1,12 @@
+{
+  "name": "flood-monitor-backend",
+  "version": "1.0.0",
+  "description": "Live dashboard backend for an ESP32 flood sensing node",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
