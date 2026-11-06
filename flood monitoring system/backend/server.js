@@ -52,10 +52,14 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));  // optional: backend can still serve the dashboard
 
 app.get('/health', (req, res) => res.send('ok'));
+app.get('/', (req, res) => res.send('Flood Sense 360 backend is running. Open the dashboard on Netlify. Check /health and /api/state.'));
 
 // ESP32 posts here
 app.post('/api/reading', (req, res) => {
-  if (req.get('x-api-key') !== API_KEY) return res.status(401).json({ error: 'bad api key' });
+  if (req.get('x-api-key') !== API_KEY) {
+    console.log('Rejected reading: API key does not match the one set on Render.');
+    return res.status(401).json({ error: 'bad api key' });
+  }
 
   const { device, level, raw, status, warn, flood, rssi } = req.body || {};
   if (typeof level !== 'number' || level < 0 || level > 100 || !VALID_STATUS.has(status)) {
@@ -90,6 +94,7 @@ app.post('/api/reading', (req, res) => {
     else if (status === 'SAFE' && previousStatus !== 'UNKNOWN') addAlert('info', `Water level is back to normal (${level}%).`);
   }
 
+  console.log(`Reading from ${state.device}: ${level}% (${status})`);
   broadcast('reading', { state, point: { t: now, level } });
   res.json({ ok: true });
 });
