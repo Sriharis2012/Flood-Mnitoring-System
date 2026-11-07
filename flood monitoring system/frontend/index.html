@@ -58,7 +58,7 @@ footer b{color:#fff}
   <div class="in">
     <span class="badge">MATHS EXHIBITION</span>
     <h1><span class="a">Flood Sense</span><span class="b">360</span></h1>
-    <p class="sub">Using Difference Equation and Integration</p>
+    <p class="sub">Using Differential Equation and Integration</p>
     <div class="by"><small>BY</small><b>V. Sivabala, Andrea Blessie</b></div>
     <div class="btns">
       <a class="btn p" href="dashboard.html">Open live dashboard</a>
@@ -73,13 +73,13 @@ footer b{color:#fff}
 
 <section class="sec">
   <h2>How Flood Sense 360 works</h2>
-  <p>An ESP32 reads the water level sensor, lights an RGB LED, sounds a buzzer and streams live data to this dashboard. Two ideas from mathematics turn raw readings into warnings.</p>
+  <p>An ESP32 reads the water level sensor, lights red, yellow and green LEDs, sounds a buzzer and streams live data to this dashboard. Two ideas from mathematics turn raw readings into warnings.</p>
   <div class="grid">
     <article class="c d">
-      <h3>Difference equation</h3>
-      <p>Each reading is a step in a sequence. The change between steps predicts the next level.</p>
-      <code>ΔL[n] = L[n] − L[n−1]</code>
-      <code>L[n+1] = L[n] + ΔL[n]</code>
+      <h3>Differential equation</h3>
+      <p>The water level changes continuously. Its rate of rise tells us where the level is heading and when it will reach the flood line.</p>
+      <code>dh/dt = Q_in ÷ A</code>
+      <code>h(t) = h₀ + r·t</code>
     </article>
     <article class="c i">
       <h3>Integration</h3>
