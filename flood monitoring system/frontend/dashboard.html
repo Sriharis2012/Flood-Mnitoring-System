@@ -16,6 +16,7 @@ body{margin:0;color:var(--ink);min-height:100vh;background:linear-gradient(180de
 body[data-status=WARNING] .banner{color:#1d1500}
 .banner h1{margin:0;font-size:clamp(1.4rem,3.4vw,2.3rem);font-weight:800;letter-spacing:-.01em}
 .banner p{margin:4px 0 0;opacity:.95}
+#bSnd{border:0;cursor:pointer;font:inherit;font-weight:700;font-size:.85rem}#bSnd[aria-pressed=true]{background:var(--ink);color:#fff}
 .tag{background:rgba(0,0,0,.22);border-radius:99px;padding:6px 14px;font-weight:700;font-size:.85rem;color:inherit;text-decoration:none}
 main{max-width:1180px;margin:0 auto;padding:22px;display:grid;grid-template-columns:minmax(250px,320px) 1fr;gap:22px}
 @media(max-width:800px){main{grid-template-columns:1fr;padding:14px}}
@@ -66,7 +67,7 @@ ul.al{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
 <body data-status="WAITING">
 <header class="banner" role="status" aria-live="assertive">
   <div><h1 id="hl">Waiting for sensor</h1><p id="msg"></p></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="tag" href="index.html">← Home</a><span class="tag" id="tag">Live sensor</span></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="tag" href="index.html">← Home</a><button class="tag" id="bSnd" aria-pressed="false">🔔 Alarm sound: off</button><span class="tag" id="tag">Live sensor</span></div>
 </header>
 <main>
   <section class="card" aria-label="Water level gauge">
@@ -106,7 +107,7 @@ ul.al{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
       <svg class="chart" id="chart" viewBox="0 0 640 220" role="img" aria-label="Water level history"></svg>
     </section>
     <section class="card">
-      <h2>The maths behind it: difference equations and integration (updates live)</h2>
+      <h2>The maths behind it: differential equations and integration (updates live)</h2>
       <div class="math" id="math"></div>
     </section>
     <section class="card">
@@ -118,9 +119,9 @@ ul.al{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
 </main>
 <script>
 const $=id=>document.getElementById(id);
-const API_BASE='https://flood-sense-360.onrender.com'; // Render URL, no trailing slash
+const API_BASE='https://YOUR-APP-NAME.onrender.com'; // Render URL, no trailing slash
 const OFFLINE_MS=15000;
-const mk=()=>({state:{device:null,level:0,raw:0,status:'UNKNOWN',warn:35,flood:65,rssi:null,lastSeen:null,online:false},history:[],alerts:[]});
+const mk=()=>({state:{device:null,level:0,raw:0,status:'UNKNOWN',warn:50,flood:75,rssi:null,lastSeen:null,online:false},history:[],alerts:[]});
 const live=mk(), sim=mk(); sim.state.online=true; sim.state.device='demo';
 let M=live, auto=false, hover=null, simLevel=10;
 const num=id=>+$(id).value||0, f=(v,d=1)=>Number(v).toFixed(d);
@@ -181,15 +182,18 @@ function renderMath(vol){
     const n=d.length,dhA=d.reduce((a,x)=>a+x.dh,0)/n,dtA=d.reduce((a,x)=>a+x.dt,0)/n,rate=dtA?dhA/dtA:0,h0=s.level,last=d[n-1];
     const cl=v=>Math.max(0,Math.min(100,v)),k5=dtA?Math.round(5/dtA):0,h5=cl(h0+5*rate);
     const steps=dhA>0.01&&h0<s.flood?(s.flood-h0)/dhA:null;
-    h+=eq('5. Difference equation (level step by step)','d',
-      ['f','Δh[n] = h[n] − h[n−1]        h[n+1] = h[n] + Δh'],
+    const tF=rate>0.01&&h0<s.flood?(s.flood-h0)/rate:null;
+    h+=eq('5. Differential equation (rate of rise of the water level)','d',
+      ['f','dh/dt = Q_in ÷ A_tank      (level rises at inflow ÷ tank area)'],
+      ['f','From the sensor data:  dh/dt ≈ Δh ÷ Δt'],
       ['f',`latest: Δh = ${f(hp[hp.length-1].level)} − ${f(hp[hp.length-2].level)} = ${f(last.dh,2)} %`],
-      ['f',`mean step: Δh̄ = ${f(dhA,3)} % every Δt = ${f(dtA*60,1)} s,  so rate r = Δh̄ ÷ Δt = ${f(rate,2)} % per min`],
-      ['r',`h[n+1] = ${f(h0)} + ${f(dhA,3)} = ${f(cl(h0+dhA))} %`]);
-    h+=eq('6. Forecast by iterating the difference equation','d',
-      ['f','h[n+k] = h[n] + k·Δh̄   (the same step applied k times)'],
-      ['f',`5 min is k = 5 ÷ ${f(dtA,3)} ≈ ${k5} steps:  h[n+${k5}] = ${f(h0)} + ${k5} × ${f(dhA,3)}`],
-      ['r',`= ${f(h5)} % after 5 minutes`+(steps!==null?`   |   flood after n = (${s.flood} − ${f(h0)}) ÷ ${f(dhA,3)} ≈ ${Math.ceil(steps)} steps`:'')]);
+      ['f',`mean: Δh̄ = ${f(dhA,3)} % in Δt = ${f(dtA*60,1)} s`],
+      ['r',`dh/dt = ${f(dhA,3)} ÷ ${f(dtA,4)} = ${f(rate,2)} % per min`]);
+    h+=eq('6. Solving it: exact solution and Euler method','d',
+      ['f','If dh/dt = r is constant:  ∫ dh = ∫ r dt   gives   h(t) = h₀ + r·t'],
+      ['f','Euler step (numerical method):  h[n+1] = h[n] + (dh/dt)·Δt'],
+      ['f',`after 5 min:  h(5) = ${f(h0)} + ${f(rate,2)} × 5`],
+      ['r',`= ${f(h5)} %`+(tF!==null?`   |   flood when h(t) = ${s.flood}:  t = (${s.flood} − ${f(h0)}) ÷ ${f(rate,2)} = ${f(tF,1)} min`:'')]);
     let area=0,T=0;for(let i=1;i<hp.length;i++){const dt=(hp[i].t-hp[i-1].t)/60000;area+=(hp[i-1].level+hp[i].level)/2*dt;T+=dt}
     h+=eq('7. Integration: area under the level curve (trapezoidal rule)','i',
       ['f','A = ∫ h(t) dt ≈ Σ ( h[i−1] + h[i] ) ÷ 2 × Δt[i]'],
@@ -200,7 +204,7 @@ function renderMath(vol){
       ['f','Q = A_tank × dh/dt        V = ∫ Q dt = A_tank × (h_end − h_start)'],
       ['f',`1 % of the tank = ${f(lpp,2)} litres,  so  Q ≈ ${f(lpp,2)} × ${f(rate,2)} = ${f(q,2)} litres per min`],
       ['r',`V = ${f(lpp,2)} × (${f(hp[hp.length-1].level)} − ${f(hp[0].level)}) = ${f(lpp*(hp[hp.length-1].level-hp[0].level),1)} litres in ${f(T,2)} min`]);
-  }else h+=eq('5–8. Difference equation and integration','d',['f','Needs at least 3 readings. Collecting data…']);
+  }else h+=eq('5–8. Differential equation and integration','d',['f','Needs at least 3 readings. Collecting data…']);
   h+=eq('9. Volume of water in the tank','',['f','V = width × length × height × level ÷ 100'],['f',`= ${num('cW')} × ${num('cL')} × ${num('cH')} × ${f(s.level)} ÷ 100 = ${f(num('cW')*num('cL')*num('cH')*s.level/100,0)} cm³`],['r',`= ${f(vol,1)} litres   (1 litre = 1000 cm³)`]);
   $('math').innerHTML=h;
 }
@@ -258,6 +262,27 @@ function connect(){
   es.addEventListener('state',e=>{Object.assign(live.state,JSON.parse(e.data));if(M===live)render()});
   es.addEventListener('alert',e=>{live.alerts.unshift(JSON.parse(e.data));if(M===live)renderAlerts()});
 }
+
+/* ---- alarm sound through the computer speaker (needs one click to enable) ---- */
+let actx=null,soundOn=false,sirenFlip=false;
+function beep(freq,dur){
+  if(!actx)return;const o=actx.createOscillator(),g=actx.createGain();
+  o.type='square';o.frequency.value=freq;g.gain.setValueAtTime(0.0001,actx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.25,actx.currentTime+0.01);g.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+dur);
+  o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+dur+0.02);
+}
+function alarmLoop(){
+  const st=effStatus();let next=300;
+  if(soundOn&&st==='FLOOD'){sirenFlip=!sirenFlip;beep(sirenFlip?960:720,0.18);next=400}
+  else if(soundOn&&st==='WARNING'){beep(600,0.15);next=2000}
+  setTimeout(alarmLoop,next);
+}
+$('bSnd').onclick=()=>{
+  soundOn=!soundOn;
+  if(soundOn){actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume();beep(800,0.12)}
+  $('bSnd').setAttribute('aria-pressed',soundOn);$('bSnd').textContent=soundOn?'🔔 Alarm sound: on':'🔔 Alarm sound: off';
+};
+alarmLoop();
 render();connect();
 if(location.hash==='#demo')setDemo(true);
 </script>
